@@ -6,6 +6,7 @@ const BAR_COUNT = 5
 
 function App() {
   const [state, setState] = useState('idle') // idle | listening | processing | speaking
+  const [statusMessage, setStatusMessage] = useState('')
   const [transcript, setTranscript] = useState('')
   const [chatResponse, setChatResponse] = useState('')
   const synthRef = useRef(window.speechSynthesis)
@@ -84,20 +85,23 @@ function App() {
   const speakViaTTS = useCallback(async (text) => {
     try {
       setState('processing')
+      setStatusMessage('converting to speech...')
       const res = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
       })
-      if (!res.ok) { setState('idle'); return }
+      if (!res.ok) { setState('idle'); setStatusMessage(''); return }
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const audio = new Audio(url)
       audio.crossOrigin = 'anonymous'
       audioRef.current = audio
       setState('speaking')
+      setStatusMessage('speaking...')
       audio.onended = () => {
         setState('idle')
+        setStatusMessage('')
         stopAnalyser()
         URL.revokeObjectURL(url)
       }
@@ -105,6 +109,7 @@ function App() {
       startPlaybackAnalyser(audio)
     } catch {
       setState('idle')
+      setStatusMessage('')
       stopAnalyser()
     }
   }, [startPlaybackAnalyser, stopAnalyser])
@@ -140,6 +145,7 @@ function App() {
     if (chatBusyRef.current) return
     chatBusyRef.current = true
     setState('processing')
+    setStatusMessage('checking your crop conditions...')
     try {
       await syncEnvironment()
       const res = await fetch(`${API_BASE}/chat`, {
@@ -154,6 +160,8 @@ function App() {
       }
     } catch (err) {
       console.error('Chat call failed:', err)
+      setState('idle')
+      setStatusMessage('')
     } finally {
       chatBusyRef.current = false
     }
@@ -235,6 +243,7 @@ function App() {
   const startListening = useCallback(async () => {
     if (chatBusyRef.current) return
     setState('listening')
+    setStatusMessage('listening...')
     setTranscript('')
     setChatResponse('')
     chunksRef.current = []
@@ -252,6 +261,7 @@ function App() {
 
       mediaRecorder.onstop = async () => {
         setState('processing')
+        setStatusMessage('transcribing to words...')
         setTranscript('')
         stopAnalyser()
         stream.getTracks().forEach((t) => t.stop())
@@ -274,10 +284,11 @@ function App() {
 
           const result = await res.json()
           const text = result.text || JSON.stringify(result)
-          setTranscript(`"${text}"`)
+          setTranscript(`You said: "${text}"`)
           sendToChat(text)
         } catch (err) {
           setTranscript(`Error: ${err.message}`)
+          setStatusMessage('')
           setState('idle')
         }
       }
@@ -285,6 +296,7 @@ function App() {
       mediaRecorder.start()
     } catch (err) {
       setTranscript(`Mic Error: ${err.message}`)
+      setStatusMessage('')
       setState('idle')
     }
   }, [sendToChat, startAnalyser, stopAnalyser])
@@ -304,18 +316,10 @@ function App() {
       if (audioRef.current) audioRef.current.pause()
       stopAnalyser()
       setState('idle')
+      setStatusMessage('')
       setTranscript('')
     }
   }, [state, startListening, stopListening, stopAnalyser])
-
-  const getStatusText = () => {
-    switch (state) {
-      case 'listening': return 'listening...'
-      case 'processing': return 'thinking...'
-      case 'speaking': return 'speaking...'
-      default: return 'push to speak'
-    }
-  }
 
   return (
     <div className="voice-assistant">
@@ -347,7 +351,7 @@ function App() {
       </button>
 
       {/* Status label */}
-      <p className="status-label">{getStatusText()}</p>
+      <p className="status-label">{statusMessage || 'push to speak'}</p>
 
       {/* Transcript / response */}
       {transcript && <p className="transcript">{transcript}</p>}
