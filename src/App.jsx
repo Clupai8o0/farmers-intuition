@@ -1,17 +1,93 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import './App.css'
 
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
+
 function App() {
   const [state, setState] = useState('idle') // idle | listening | speaking
   const [transcript, setTranscript] = useState('')
   const [ttsLoading, setTtsLoading] = useState(false)
   const [sttLoading, setSttLoading] = useState(false)
   const [sttRecording, setSttRecording] = useState(false)
+  const [chatResponse, setChatResponse] = useState('')
   const recognitionRef = useRef(null)
   const synthRef = useRef(window.speechSynthesis)
   const audioRef = useRef(null)
   const mediaRecorderRef = useRef(null)
   const chunksRef = useRef([])
+  const lastAlertRef = useRef('')
+  const pollTimerRef = useRef(null)
+
+  // Send text to ElevenLabs TTS and play it
+  const speakViaTTS = useCallback(async (text) => {
+    try {
+      setState('speaking')
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      })
+      if (!res.ok) return
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const audio = new Audio(url)
+      audioRef.current = audio
+      audio.onended = () => {
+        setState('idle')
+        URL.revokeObjectURL(url)
+      }
+      audio.play()
+    } catch {
+      setState('idle')
+    }
+  }, [])
+
+  // Send transcript to /chat backend and speak the response
+  const sendToChat = useCallback(async (message) => {
+    try {
+      const res = await fetch(`${API_BASE}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message }),
+      })
+      const data = await res.json()
+      if (data.response) {
+        setChatResponse(data.response)
+        await speakViaTTS(data.response)
+      }
+    } catch (err) {
+      console.error('Chat call failed:', err)
+    }
+  }, [speakViaTTS])
+
+  // Poll /environment every 5s for auto-alerts
+  useEffect(() => {
+    pollTimerRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/environment`)
+        const data = await res.json()
+        if (data.status === 'ok' && data.should_alert) {
+          const alertKey = JSON.stringify(data.alerts || [])
+          if (alertKey !== lastAlertRef.current) {
+            lastAlertRef.current = alertKey
+            const chatRes = await fetch(`${API_BASE}/chat`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ message: null }),
+            })
+            const chatData = await chatRes.json()
+            if (chatData.response) {
+              setChatResponse(chatData.response)
+              speakViaTTS(chatData.response)
+            }
+          }
+        }
+      } catch {
+        /* backend may not be running */
+      }
+    }, 5000)
+    return () => clearInterval(pollTimerRef.current)
+  }, [speakViaTTS])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -116,8 +192,9 @@ function App() {
 
           const result = await res.json()
           const text = result.text || JSON.stringify(result)
-          setTranscript(`Transcription: "${text}"`)
-          setState('idle')
+          setTranscript(`You said: "${text}"`)
+          // Send transcript to /chat backend for AI response
+          sendToChat(text)
         } catch (err) {
           setTranscript(`STT Error: ${err.message}`)
           setState('idle')
@@ -132,7 +209,7 @@ function App() {
       setState('idle')
       setSttRecording(false)
     }
-  }, [sttRecording])
+  }, [sttRecording, sendToChat])
 
   // --- Browser-based voice flow (original) ---
   const startListening = useCallback(() => {
@@ -274,6 +351,13 @@ function App() {
 
       {/* Transcript */}
       <p className="transcript">{transcript}</p>
+
+      {/* Chat response from backend */}
+      {chatResponse && (
+        <p className="transcript" style={{ opacity: 0.6, marginTop: '0.5rem', fontSize: '0.8rem' }}>
+          AI: {chatResponse}
+        </p>
+      )}
 
       {/* ElevenLabs test buttons */}
       <div className="test-buttons">
