@@ -8,7 +8,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'ELEVEN_LABS API key not configured' })
   }
 
-  const { text, voiceId = 'JBFqnCBsd6RMkjVDRZzb' } = req.body
+  const { text, voiceId = 'DXFkLCBUTmvXpp2QwZjA' } = req.body
 
   if (!text) {
     return res.status(400).json({ error: 'text is required' })
