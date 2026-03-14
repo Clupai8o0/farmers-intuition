@@ -211,69 +211,62 @@ function App() {
     }
   }, [sttRecording, sendToChat])
 
-  // --- Browser-based voice flow (original) ---
-  const startListening = useCallback(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SpeechRecognition) {
-      setTranscript('Speech recognition is not supported in this browser.')
-      return
-    }
+  // --- ElevenLabs-powered voice flow ---
+  const startListening = useCallback(async () => {
+    setState('listening')
+    setTranscript('Listening... tap to stop')
+    setChatResponse('')
+    chunksRef.current = []
 
-    const recognition = new SpeechRecognition()
-    recognition.continuous = false
-    recognition.interimResults = true
-    recognition.lang = 'en-US'
-    recognitionRef.current = recognition
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mediaRecorder = new MediaRecorder(stream)
+      mediaRecorderRef.current = mediaRecorder
 
-    recognition.onstart = () => {
-      setState('listening')
-      setTranscript('')
-    }
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data)
+      }
 
-    recognition.onresult = (event) => {
-      const result = Array.from(event.results)
-        .map((r) => r[0].transcript)
-        .join('')
-      setTranscript(result)
-    }
+      mediaRecorder.onstop = async () => {
+        setTranscript('Transcribing...')
+        stream.getTracks().forEach((t) => t.stop())
 
-    recognition.onend = () => {
-      if (state === 'listening') {
-        setState('speaking')
-        const responses = [
-          "I heard you. How can I help further?",
-          "That's interesting. Tell me more.",
-          "I understand. What would you like me to do?",
-          "Got it. Is there anything else?",
-          "I'm here to help. What's next?",
-        ]
-        const response = responses[Math.floor(Math.random() * responses.length)]
-        setTranscript(response)
+        try {
+          const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
+          const formData = new FormData()
+          formData.append('file', blob, 'recording.webm')
+          formData.append('model_id', 'scribe_v1')
 
-        const utterance = new SpeechSynthesisUtterance(response)
-        utterance.rate = 1
-        utterance.pitch = 1
-        utterance.onend = () => {
+          const res = await fetch('/api/stt', {
+            method: 'POST',
+            body: formData,
+          })
+
+          if (!res.ok) {
+            const err = await res.json()
+            throw new Error(err.error || 'STT request failed')
+          }
+
+          const result = await res.json()
+          const text = result.text || JSON.stringify(result)
+          setTranscript(`You: "${text}"`)
+          sendToChat(text)
+        } catch (err) {
+          setTranscript(`Error: ${err.message}`)
           setState('idle')
-          setTranscript('')
         }
-        synthRef.current.speak(utterance)
       }
-    }
 
-    recognition.onerror = (event) => {
-      if (event.error !== 'aborted') {
-        setTranscript(`Error: ${event.error}`)
-      }
+      mediaRecorder.start()
+    } catch (err) {
+      setTranscript(`Mic Error: ${err.message}`)
       setState('idle')
     }
-
-    recognition.start()
-  }, [state])
+  }, [sendToChat])
 
   const stopListening = useCallback(() => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop()
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop()
     }
   }, [])
 
@@ -283,7 +276,6 @@ function App() {
     } else if (state === 'idle') {
       startListening()
     } else if (state === 'speaking') {
-      synthRef.current.cancel()
       if (audioRef.current) audioRef.current.pause()
       setState('idle')
       setTranscript('')
@@ -296,7 +288,6 @@ function App() {
     } else if (state === 'listening') {
       stopListening()
     } else if (state === 'speaking') {
-      synthRef.current.cancel()
       if (audioRef.current) audioRef.current.pause()
       setState('idle')
       setTranscript('')
