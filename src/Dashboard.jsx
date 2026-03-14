@@ -3,6 +3,30 @@ import './Dashboard.css'
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
 
+const VARIETIES = [
+  { value: 'shiraz', label: 'Shiraz' },
+  { value: 'cabernet_sauvignon', label: 'Cabernet Sauvignon' },
+  { value: 'pinot_noir', label: 'Pinot Noir' },
+  { value: 'chardonnay', label: 'Chardonnay' },
+  { value: 'merlot', label: 'Merlot' },
+]
+
+const GROWTH_STAGES = [
+  { value: 'budburst', label: 'Budburst' },
+  { value: 'flowering', label: 'Flowering' },
+  { value: 'veraison', label: 'Veraison' },
+  { value: 'harvest', label: 'Harvest' },
+  { value: 'dormancy', label: 'Dormancy' },
+]
+
+const REGIONS = [
+  { value: 'yarra_valley', label: 'Yarra Valley' },
+  { value: 'mornington_peninsula', label: 'Mornington Peninsula' },
+  { value: 'gippsland', label: 'Gippsland' },
+  { value: 'heathcote', label: 'Heathcote' },
+  { value: 'macedon_ranges', label: 'Macedon Ranges' },
+]
+
 function CircularGauge({ label, value, min, max, unit, color, onChange }) {
   const radius = 54
   const strokeWidth = 8
@@ -52,6 +76,9 @@ export default function Dashboard() {
   const [rainfall, setRainfall] = useState(0.0)
   const [windSpeed, setWindSpeed] = useState(8.0)
   const [farmSize, setFarmSize] = useState(5.0)
+  const [variety, setVariety] = useState('shiraz')
+  const [growthStage, setGrowthStage] = useState('veraison')
+  const [region, setRegion] = useState('yarra_valley')
 
   const [backendStatus, setBackendStatus] = useState('checking')
   const [syncing, setSyncing] = useState(false)
@@ -85,6 +112,9 @@ export default function Dashboard() {
               if (env.rainfall != null) setRainfall(env.rainfall)
               if (env.wind_speed != null) setWindSpeed(env.wind_speed)
               if (env.land_area_ha != null) setFarmSize(env.land_area_ha)
+              if (env.variety) setVariety(env.variety)
+              if (env.growth_stage) setGrowthStage(env.growth_stage)
+              if (env.region) setRegion(env.region)
             }
           } catch {
             /* no previous state */
@@ -137,9 +167,9 @@ export default function Dashboard() {
             rainfall,
             wind_speed: windSpeed,
             land_area_ha: farmSize,
-            growth_stage: 'veraison',
-            variety: 'shiraz',
-            region: 'yarra_valley',
+            growth_stage: growthStage,
+            variety,
+            region,
           }),
         })
         const data = await res.json()
@@ -158,7 +188,7 @@ export default function Dashboard() {
     }, 500)
 
     return () => clearTimeout(pushTimerRef.current)
-  }, [temperature, humidity, soilMoisture, rainfall, windSpeed, farmSize, backendStatus, triggerAutoAlert])
+  }, [temperature, humidity, soilMoisture, rainfall, windSpeed, farmSize, variety, growthStage, region, backendStatus, triggerAutoAlert])
 
   return (
     <div className="dashboard">
@@ -177,6 +207,27 @@ export default function Dashboard() {
           </div>
         )}
       </header>
+
+      <section className="selectors-row">
+        <div className="selector-group">
+          <label className="selector-label">Variety</label>
+          <select className="selector" value={variety} onChange={(e) => setVariety(e.target.value)}>
+            {VARIETIES.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
+          </select>
+        </div>
+        <div className="selector-group">
+          <label className="selector-label">Growth Stage</label>
+          <select className="selector" value={growthStage} onChange={(e) => setGrowthStage(e.target.value)}>
+            {GROWTH_STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+        </div>
+        <div className="selector-group">
+          <label className="selector-label">Region</label>
+          <select className="selector" value={region} onChange={(e) => setRegion(e.target.value)}>
+            {REGIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+          </select>
+        </div>
+      </section>
 
       <section className="gauges-row">
         <CircularGauge label="Temperature" value={temperature} min={0} max={50} unit="°C" color="#f97316" onChange={setTemperature} />
