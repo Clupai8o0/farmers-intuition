@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -r \"ELEVEN_LABS\\\\|VITE_\" /c/Users/clupa/OneDrive/Documents/projects/hack48/farmers-intuition --include=*.js --include=*.jsx --include=*.json --include=*.md)",
+      "Bash(npx vercel:*)",
+      "Bash(npm install:*)"
+    ]
+  }
+}
