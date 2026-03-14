@@ -51,6 +51,7 @@ export default function Dashboard() {
   const [soilMoisture, setSoilMoisture] = useState(62.0)
   const [rainfall, setRainfall] = useState(0.0)
   const [windSpeed, setWindSpeed] = useState(8.0)
+  const [farmSize, setFarmSize] = useState(5.0)
 
   const [backendStatus, setBackendStatus] = useState('checking')
   const [syncing, setSyncing] = useState(false)
@@ -83,6 +84,7 @@ export default function Dashboard() {
               if (env.soil_moisture != null) setSoilMoisture(env.soil_moisture)
               if (env.rainfall != null) setRainfall(env.rainfall)
               if (env.wind_speed != null) setWindSpeed(env.wind_speed)
+              if (env.land_area_ha != null) setFarmSize(env.land_area_ha)
             }
           } catch {
             /* no previous state */
@@ -134,6 +136,7 @@ export default function Dashboard() {
             soil_moisture: soilMoisture,
             rainfall,
             wind_speed: windSpeed,
+            land_area_ha: farmSize,
             growth_stage: 'veraison',
             variety: 'shiraz',
             region: 'yarra_valley',
@@ -155,7 +158,7 @@ export default function Dashboard() {
     }, 500)
 
     return () => clearTimeout(pushTimerRef.current)
-  }, [temperature, humidity, soilMoisture, rainfall, windSpeed, backendStatus, triggerAutoAlert])
+  }, [temperature, humidity, soilMoisture, rainfall, windSpeed, farmSize, backendStatus, triggerAutoAlert])
 
   return (
     <div className="dashboard">
@@ -181,6 +184,7 @@ export default function Dashboard() {
         <CircularGauge label="Soil Moisture" value={soilMoisture} min={0} max={100} unit="%" color="#22c55e" onChange={setSoilMoisture} />
         <CircularGauge label="Rainfall" value={rainfall} min={0} max={100} unit="mm" color="#8b5cf6" onChange={setRainfall} />
         <CircularGauge label="Wind Speed" value={windSpeed} min={0} max={150} unit="km/h" color="#06b6d4" onChange={setWindSpeed} />
+        <CircularGauge label="Farm Size" value={farmSize} min={0.5} max={50} unit="ha" color="#a3e635" onChange={setFarmSize} />
       </section>
 
       <section className="info-panel">
