@@ -4,4 +4,14 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  server: {
+    proxy: {
+      '/health': 'http://localhost:8000',
+      '/environment': 'http://localhost:8000',
+      '/chat': 'http://localhost:8000',
+      '/predict': 'http://localhost:8000',
+      '/recommend': 'http://localhost:8000',
+      '/retrain': 'http://localhost:8000',
+    },
+  },
 })
