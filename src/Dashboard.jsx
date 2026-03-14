@@ -142,7 +142,11 @@ export default function Dashboard() {
         const data = await res.json()
         if (data.recommendation) setRecommendation(data.recommendation)
         if (data.alerts) setAlerts(data.alerts)
-        if (data.should_alert) triggerAutoAlert()
+        if (data.should_alert) {
+          triggerAutoAlert()
+        } else {
+          localStorage.removeItem('pendingVoiceAlert')
+        }
       } catch (err) {
         console.error('Failed to push environment:', err)
       } finally {
