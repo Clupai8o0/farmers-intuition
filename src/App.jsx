@@ -4,8 +4,14 @@ import './App.css'
 function App() {
   const [state, setState] = useState('idle') // idle | listening | speaking
   const [transcript, setTranscript] = useState('')
+  const [ttsLoading, setTtsLoading] = useState(false)
+  const [sttLoading, setSttLoading] = useState(false)
+  const [sttRecording, setSttRecording] = useState(false)
   const recognitionRef = useRef(null)
   const synthRef = useRef(window.speechSynthesis)
+  const audioRef = useRef(null)
+  const mediaRecorderRef = useRef(null)
+  const chunksRef = useRef([])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -14,9 +20,121 @@ function App() {
         recognitionRef.current.abort()
       }
       synthRef.current.cancel()
+      if (audioRef.current) {
+        audioRef.current.pause()
+      }
     }
   }, [])
 
+  // --- ElevenLabs TTS ---
+  const testTTS = useCallback(async () => {
+    setTtsLoading(true)
+    setTranscript('')
+    setState('speaking')
+    try {
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: 'Hello! I am your voice assistant powered by Eleven Labs. How can I help you today?',
+        }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'TTS request failed')
+      }
+
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const audio = new Audio(url)
+      audioRef.current = audio
+
+      setTranscript('Playing ElevenLabs TTS audio...')
+      audio.onended = () => {
+        setState('idle')
+        setTranscript('TTS test complete!')
+        URL.revokeObjectURL(url)
+        setTimeout(() => setTranscript(''), 3000)
+      }
+      audio.play()
+    } catch (err) {
+      setTranscript(`TTS Error: ${err.message}`)
+      setState('idle')
+    } finally {
+      setTtsLoading(false)
+    }
+  }, [])
+
+  // --- ElevenLabs STT ---
+  const testSTT = useCallback(async () => {
+    if (sttRecording) {
+      // Stop recording
+      if (mediaRecorderRef.current) {
+        mediaRecorderRef.current.stop()
+      }
+      return
+    }
+
+    setSttRecording(true)
+    setState('listening')
+    setTranscript('Recording... tap again to stop')
+    chunksRef.current = []
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mediaRecorder = new MediaRecorder(stream)
+      mediaRecorderRef.current = mediaRecorder
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data)
+        }
+      }
+
+      mediaRecorder.onstop = async () => {
+        setSttRecording(false)
+        setSttLoading(true)
+        setTranscript('Transcribing with ElevenLabs...')
+        stream.getTracks().forEach((t) => t.stop())
+
+        try {
+          const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
+          const formData = new FormData()
+          formData.append('file', blob, 'recording.webm')
+          formData.append('model_id', 'scribe_v1')
+
+          const res = await fetch('/api/stt', {
+            method: 'POST',
+            body: formData,
+          })
+
+          if (!res.ok) {
+            const err = await res.json()
+            throw new Error(err.error || 'STT request failed')
+          }
+
+          const result = await res.json()
+          const text = result.text || JSON.stringify(result)
+          setTranscript(`Transcription: "${text}"`)
+          setState('idle')
+        } catch (err) {
+          setTranscript(`STT Error: ${err.message}`)
+          setState('idle')
+        } finally {
+          setSttLoading(false)
+        }
+      }
+
+      mediaRecorder.start()
+    } catch (err) {
+      setTranscript(`Mic Error: ${err.message}`)
+      setState('idle')
+      setSttRecording(false)
+    }
+  }, [sttRecording])
+
+  // --- Browser-based voice flow (original) ---
   const startListening = useCallback(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
     if (!SpeechRecognition) {
@@ -44,7 +162,6 @@ function App() {
 
     recognition.onend = () => {
       if (state === 'listening') {
-        // Simulate a response after listening ends
         setState('speaking')
         const responses = [
           "I heard you. How can I help further?",
@@ -90,6 +207,7 @@ function App() {
       startListening()
     } else if (state === 'speaking') {
       synthRef.current.cancel()
+      if (audioRef.current) audioRef.current.pause()
       setState('idle')
       setTranscript('')
     }
@@ -102,12 +220,16 @@ function App() {
       stopListening()
     } else if (state === 'speaking') {
       synthRef.current.cancel()
+      if (audioRef.current) audioRef.current.pause()
       setState('idle')
       setTranscript('')
     }
   }, [state, startListening, stopListening])
 
   const getStatusText = () => {
+    if (ttsLoading) return 'Generating speech...'
+    if (sttLoading) return 'Transcribing...'
+    if (sttRecording) return 'Recording...'
     switch (state) {
       case 'listening': return 'Listening...'
       case 'speaking': return 'Speaking...'
@@ -153,6 +275,36 @@ function App() {
       {/* Transcript */}
       <p className="transcript">{transcript}</p>
 
+      {/* ElevenLabs test buttons */}
+      <div className="test-buttons">
+        <button
+          className="test-btn tts-btn"
+          onClick={testTTS}
+          disabled={ttsLoading || state === 'speaking'}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+          </svg>
+          {ttsLoading ? 'Generating...' : 'Test TTS'}
+        </button>
+
+        <button
+          className={`test-btn stt-btn ${sttRecording ? 'recording' : ''}`}
+          onClick={testSTT}
+          disabled={sttLoading}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+            <line x1="12" y1="19" x2="12" y2="23" />
+            <line x1="8" y1="23" x2="16" y2="23" />
+          </svg>
+          {sttLoading ? 'Transcribing...' : sttRecording ? 'Stop Recording' : 'Test STT'}
+        </button>
+      </div>
+
       {/* Bottom controls */}
       <div className="controls">
         {/* End call button */}
@@ -160,7 +312,9 @@ function App() {
           className="control-btn"
           onClick={() => {
             synthRef.current.cancel()
+            if (audioRef.current) audioRef.current.pause()
             if (recognitionRef.current) recognitionRef.current.abort()
+            if (mediaRecorderRef.current && sttRecording) mediaRecorderRef.current.stop()
             setState('idle')
             setTranscript('')
           }}
