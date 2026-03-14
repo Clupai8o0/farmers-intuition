@@ -289,6 +289,23 @@
 .confidence-medium { color: #eab308; }
 .confidence-low { color: #ef4444; }
 
+/* Savings */
+.savings-card {
+  border-color: rgba(34, 197, 94, 0.15);
+  background: rgba(34, 197, 94, 0.03);
+}
+
+.savings-positive {
+  color: #22c55e;
+}
+
+.savings-disclaimer {
+  margin-top: 0.75rem;
+  font-size: 0.7rem;
+  opacity: 0.35;
+  line-height: 1.4;
+}
+
 /* Alerts */
 .alerts-card {
   border-color: rgba(239, 68, 68, 0.3);

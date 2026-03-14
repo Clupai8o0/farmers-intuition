@@ -261,6 +261,47 @@ export default function Dashboard() {
           </div>
         )}
 
+        {recommendation && (() => {
+          const BASELINE_L_HA_DAY = 4500
+          const COST_PER_KL = 3.50
+          const baselineWeeklyL = BASELINE_L_HA_DAY * 7 * farmSize
+          const modelWeeklyL = recommendation.recommended_weekly_l ?? 0
+          const reductionPct = baselineWeeklyL > 0
+            ? Math.max(0, ((baselineWeeklyL - modelWeeklyL) / baselineWeeklyL) * 100)
+            : 0
+          const annualSavedL = Math.max(0, (baselineWeeklyL - modelWeeklyL) * 52)
+          const annualSavedKL = annualSavedL / 1000
+          const annualSavedAUD = annualSavedKL * COST_PER_KL
+          return (
+            <div className="card savings-card">
+              <h2>Estimated Savings</h2>
+              <div className="rec-grid">
+                <div className="rec-item">
+                  <span className={`rec-value ${reductionPct > 0 ? 'savings-positive' : ''}`}>
+                    {reductionPct > 0 ? '\u2193 ' : ''}{reductionPct.toFixed(0)}%
+                  </span>
+                  <span className="rec-label">Water Reduction</span>
+                </div>
+                <div className="rec-item">
+                  <span className={`rec-value ${annualSavedAUD > 0 ? 'savings-positive' : ''}`}>
+                    ${annualSavedAUD.toLocaleString('en-AU', { maximumFractionDigits: 0 })}
+                  </span>
+                  <span className="rec-label">Saved / Year (AUD)</span>
+                </div>
+                <div className="rec-item">
+                  <span className={`rec-value ${annualSavedKL > 0 ? 'savings-positive' : ''}`}>
+                    {annualSavedKL.toLocaleString('en-AU', { maximumFractionDigits: 0 })}
+                  </span>
+                  <span className="rec-label">kL Conserved / Year</span>
+                </div>
+              </div>
+              <p className="savings-disclaimer">
+                Estimate based on {farmSize.toFixed(1)} ha vineyard, $3.50/kL rural water rate, vs fixed 4,500 L/ha/day schedule
+              </p>
+            </div>
+          )
+        })()}
+
         {alerts.length > 0 && (
           <div className="card alerts-card">
             <h2>Active Alerts</h2>
