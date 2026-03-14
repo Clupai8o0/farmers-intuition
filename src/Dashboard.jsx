@@ -85,6 +85,8 @@ export default function Dashboard() {
   const [recommendation, setRecommendation] = useState(null)
   const [alerts, setAlerts] = useState([])
   const [lastChatResponse, setLastChatResponse] = useState('')
+  const [modelInfo, setModelInfo] = useState(null)
+  const [modelInfoOpen, setModelInfoOpen] = useState(false)
 
   const pushTimerRef = useRef(null)
   const initialLoadRef = useRef(true)
@@ -100,6 +102,10 @@ export default function Dashboard() {
         if (cancelled) return
         if (data.status === 'ok') {
           setBackendStatus('online')
+          fetch(`${API_BASE}/model-info`)
+            .then((r) => r.json())
+            .then((d) => { if (!cancelled) setModelInfo(d) })
+            .catch(() => {})
           try {
             const envRes = await fetch(`${API_BASE}/environment`)
             const envData = await envRes.json()
@@ -332,6 +338,94 @@ export default function Dashboard() {
         {backendStatus === 'offline' && (
           <div className="card offline-card">
             <p>Backend is offline. Start the server with: <code>uvicorn src.api.main:app --reload</code></p>
+          </div>
+        )}
+
+        {modelInfo && (
+          <div className="card model-info-card">
+            <button
+              className="model-info-toggle"
+              onClick={() => setModelInfoOpen((o) => !o)}
+            >
+              Model Info {modelInfoOpen ? '\u25BE' : '\u25B8'}
+            </button>
+            {modelInfoOpen && (
+              <div className="model-info-body">
+                <div className="model-info-grid">
+                  <div className="model-info-item">
+                    <span className="model-info-label">Model</span>
+                    <span className="model-info-value">{modelInfo.model_name?.replace(/_/g, ' ')}</span>
+                  </div>
+                  {modelInfo.selected_model_metrics && (
+                    <>
+                      <div className="model-info-item">
+                        <span className="model-info-label">R²</span>
+                        <span className="model-info-value">{modelInfo.selected_model_metrics.holdout_r2?.toFixed(4)}</span>
+                      </div>
+                      <div className="model-info-item">
+                        <span className="model-info-label">RMSE</span>
+                        <span className="model-info-value">{modelInfo.selected_model_metrics.holdout_rmse?.toFixed(0)}</span>
+                      </div>
+                      <div className="model-info-item">
+                        <span className="model-info-label">MAE</span>
+                        <span className="model-info-value">{modelInfo.selected_model_metrics.holdout_mae?.toFixed(0)}</span>
+                      </div>
+                    </>
+                  )}
+                  <div className="model-info-item">
+                    <span className="model-info-label">Trained</span>
+                    <span className="model-info-value">
+                      {modelInfo.trained_at_utc ? new Date(modelInfo.trained_at_utc).toLocaleDateString() : '\u2014'}
+                    </span>
+                  </div>
+                  <div className="model-info-item">
+                    <span className="model-info-label">Dataset</span>
+                    <span className="model-info-value">{modelInfo.dataset_row_count?.toLocaleString()} rows</span>
+                  </div>
+                </div>
+
+                {modelInfo.comparison_table?.length > 0 && (
+                  <>
+                    <h3 className="model-info-subtitle">Model Comparison</h3>
+                    <div className="model-comparison-table">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Model</th>
+                            <th>R²</th>
+                            <th>RMSE</th>
+                            <th>MAE</th>
+                            <th>Score</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {modelInfo.comparison_table.map((m, i) => (
+                            <tr key={i} className={m.model_name === modelInfo.model_name ? 'selected-model' : ''}>
+                              <td>{m.model_name?.replace(/_/g, ' ')}</td>
+                              <td>{m.holdout_r2?.toFixed(4)}</td>
+                              <td>{m.holdout_rmse?.toFixed(0)}</td>
+                              <td>{m.holdout_mae?.toFixed(0)}</td>
+                              <td>{m.selection_score?.toFixed(1)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+
+                {modelInfo.limitations?.length > 0 && (
+                  <>
+                    <h3 className="model-info-subtitle">Limitations</h3>
+                    <ul className="model-limitations">
+                      {modelInfo.limitations.map((l, i) => (
+                        <li key={i}>{l}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
       </section>
