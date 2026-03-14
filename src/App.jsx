@@ -8,7 +8,7 @@ function App() {
   const [state, setState] = useState('idle') // idle | listening | processing | speaking
   const [statusMessage, setStatusMessage] = useState('')
   const [transcript, setTranscript] = useState('')
-  const [chatResponse, setChatResponse] = useState('')
+  const [chatHistory, setChatHistory] = useState([])
   const synthRef = useRef(window.speechSynthesis)
   const audioRef = useRef(null)
   const mediaRecorderRef = useRef(null)
@@ -18,6 +18,13 @@ function App() {
   const animFrameRef = useRef(null)
   const barsRef = useRef(null)
   const audioCtxRef = useRef(null)
+  const sessionIdRef = useRef(null)
+  const historyEndRef = useRef(null)
+
+  // Auto-scroll chat history
+  useEffect(() => {
+    historyEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [chatHistory])
 
   // Animate visualizer bars from analyser data
   const animateBars = useCallback(() => {
@@ -146,14 +153,25 @@ function App() {
     setStatusMessage('checking your crop conditions...')
     try {
       await syncEnvironment()
+      const body = { message }
+      if (sessionIdRef.current) {
+        body.session_id = sessionIdRef.current
+      }
       const res = await fetch(`${API_BASE}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify(body),
       })
       const data = await res.json()
+      if (data.session_id) {
+        sessionIdRef.current = data.session_id
+      }
       if (data.response) {
-        setChatResponse(data.response)
+        setChatHistory((prev) => [
+          ...prev,
+          { role: 'user', text: message },
+          { role: 'assistant', text: data.response },
+        ])
         await speakViaTTS(data.response)
       }
     } catch (err) {
@@ -198,7 +216,10 @@ function App() {
     const pending = localStorage.getItem('pendingVoiceAlert')
     if (pending) {
       localStorage.removeItem('pendingVoiceAlert')
-      setChatResponse(pending)
+      setChatHistory((prev) => [
+        ...prev,
+        { role: 'alert', text: pending },
+      ])
       speakViaTTS(pending)
     }
   }, [speakViaTTS])
@@ -218,7 +239,6 @@ function App() {
     setState('listening')
     setStatusMessage('listening...')
     setTranscript('')
-    setChatResponse('')
     chunksRef.current = []
 
     try {
@@ -257,7 +277,7 @@ function App() {
 
           const result = await res.json()
           const text = result.text || JSON.stringify(result)
-          setTranscript(`You said: "${text}"`)
+          setTranscript(text)
           sendToChat(text)
         } catch (err) {
           setTranscript(`Error: ${err.message}`)
@@ -291,12 +311,31 @@ function App() {
       stopAnalyser()
       setState('idle')
       setStatusMessage('')
-      setTranscript('')
     }
   }, [state, startListening, stopListening, stopAnalyser])
 
+  const clearSession = useCallback(() => {
+    sessionIdRef.current = null
+    setChatHistory([])
+  }, [])
+
   return (
     <div className="voice-assistant">
+      {/* Chat history */}
+      {chatHistory.length > 0 && (
+        <div className="chat-history">
+          {chatHistory.map((msg, i) => (
+            <div key={i} className={`chat-msg ${msg.role}`}>
+              <span className="chat-msg-label">
+                {msg.role === 'user' ? 'You' : msg.role === 'alert' ? 'Alert' : 'Sage'}
+              </span>
+              <p className="chat-msg-text">{msg.text}</p>
+            </div>
+          ))}
+          <div ref={historyEndRef} />
+        </div>
+      )}
+
       {/* Sound wave visualizer */}
       <div className={`wave-container ${state}`} ref={barsRef}>
         {Array.from({ length: BAR_COUNT }).map((_, i) => (
@@ -325,11 +364,16 @@ function App() {
       </button>
 
       {/* Status label */}
-      <p className="status-label">{statusMessage || 'push to speak'}</p>
+      <p className="status-label">
+        {statusMessage || (transcript ? `You said: "${transcript}"` : 'push to speak')}
+      </p>
 
-      {/* Transcript / response */}
-      {transcript && <p className="transcript">{transcript}</p>}
-      {chatResponse && <p className="chat-response">{chatResponse}</p>}
+      {/* New session button */}
+      {chatHistory.length > 0 && state === 'idle' && (
+        <button className="new-session-btn" onClick={clearSession}>
+          New conversation
+        </button>
+      )}
     </div>
   )
 }
