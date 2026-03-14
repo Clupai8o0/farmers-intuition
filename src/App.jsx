@@ -60,6 +60,34 @@ function App() {
     }
   }, [speakViaTTS])
 
+  // Seed default environment data if none exists
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/environment`)
+        const data = await res.json()
+        if (data.status === 'no_data') {
+          await fetch(`${API_BASE}/environment`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              temperature: 24.0,
+              humidity: 45.0,
+              soil_moisture: 62.0,
+              rainfall: 0.0,
+              wind_speed: 8.0,
+              growth_stage: 'veraison',
+              variety: 'shiraz',
+              region: 'yarra_valley',
+            }),
+          })
+        }
+      } catch {
+        /* backend may not be running */
+      }
+    })()
+  }, [])
+
   // Poll /environment every 5s for auto-alerts
   useEffect(() => {
     pollTimerRef.current = setInterval(async () => {
