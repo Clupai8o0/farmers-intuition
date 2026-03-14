@@ -53,6 +53,7 @@ export default function Dashboard() {
   const [windSpeed, setWindSpeed] = useState(8.0)
 
   const [backendStatus, setBackendStatus] = useState('checking')
+  const [syncing, setSyncing] = useState(false)
   const [recommendation, setRecommendation] = useState(null)
   const [alerts, setAlerts] = useState([])
   const [lastChatResponse, setLastChatResponse] = useState('')
@@ -122,6 +123,7 @@ export default function Dashboard() {
 
     clearTimeout(pushTimerRef.current)
     pushTimerRef.current = setTimeout(async () => {
+      setSyncing(true)
       try {
         const res = await fetch(`${API_BASE}/environment`, {
           method: 'POST',
@@ -143,6 +145,8 @@ export default function Dashboard() {
         if (data.should_alert) triggerAutoAlert()
       } catch (err) {
         console.error('Failed to push environment:', err)
+      } finally {
+        setSyncing(false)
       }
     }, 500)
 
@@ -159,6 +163,12 @@ export default function Dashboard() {
           {backendStatus === 'online' && 'Backend connected'}
           {backendStatus === 'offline' && 'Backend offline'}
         </div>
+        {syncing && (
+          <div className="sync-indicator">
+            <span className="sync-spinner" />
+            Syncing sensor data...
+          </div>
+        )}
       </header>
 
       <section className="gauges-row">
