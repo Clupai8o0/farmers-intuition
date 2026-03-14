@@ -13,8 +13,6 @@ function App() {
   const audioRef = useRef(null)
   const mediaRecorderRef = useRef(null)
   const chunksRef = useRef([])
-  const lastAlertRef = useRef('')
-  const pollTimerRef = useRef(null)
   const chatBusyRef = useRef(false)
   const analyserRef = useRef(null)
   const animFrameRef = useRef(null)
@@ -195,39 +193,14 @@ function App() {
     })()
   }, [])
 
-  // Poll /environment every 5s for auto-alerts
+  // Check for pending voice alerts queued by the dashboard
   useEffect(() => {
-    pollTimerRef.current = setInterval(async () => {
-      if (chatBusyRef.current) return
-      try {
-        const res = await fetch(`${API_BASE}/environment`)
-        const data = await res.json()
-        if (data.status === 'ok' && data.should_alert) {
-          const alertKey = JSON.stringify(data.alerts || [])
-          if (alertKey !== lastAlertRef.current && !chatBusyRef.current) {
-            lastAlertRef.current = alertKey
-            chatBusyRef.current = true
-            try {
-              const chatRes = await fetch(`${API_BASE}/chat`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: null }),
-              })
-              const chatData = await chatRes.json()
-              if (chatData.response) {
-                setChatResponse(chatData.response)
-                await speakViaTTS(chatData.response)
-              }
-            } finally {
-              chatBusyRef.current = false
-            }
-          }
-        }
-      } catch {
-        /* backend may not be running */
-      }
-    }, 5000)
-    return () => clearInterval(pollTimerRef.current)
+    const pending = localStorage.getItem('pendingVoiceAlert')
+    if (pending) {
+      localStorage.removeItem('pendingVoiceAlert')
+      setChatResponse(pending)
+      speakViaTTS(pending)
+    }
   }, [speakViaTTS])
 
   // Cleanup on unmount
@@ -308,6 +281,7 @@ function App() {
   }, [])
 
   const handleBubbleClick = useCallback(() => {
+    if (state === 'processing') return
     if (state === 'idle') {
       startListening()
     } else if (state === 'listening') {

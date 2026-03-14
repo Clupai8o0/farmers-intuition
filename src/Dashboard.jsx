@@ -97,7 +97,7 @@ export default function Dashboard() {
     return () => { cancelled = true }
   }, [])
 
-  // Auto-alert: call /chat then speak via /api/tts
+  // Auto-alert: call /chat, show text, queue for voice mode (no TTS on dashboard)
   const triggerAutoAlert = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/chat`, {
@@ -108,21 +108,8 @@ export default function Dashboard() {
       const data = await res.json()
       if (data.response) {
         setLastChatResponse(data.response)
-        try {
-          const ttsRes = await fetch('/api/tts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: data.response }),
-          })
-          if (ttsRes.ok) {
-            const blob = await ttsRes.blob()
-            const url = URL.createObjectURL(blob)
-            audioRef.current.src = url
-            audioRef.current.play().catch(() => {})
-          }
-        } catch {
-          /* TTS unavailable, text display is enough */
-        }
+        // Queue alert for voice assistant page to speak when user switches
+        localStorage.setItem('pendingVoiceAlert', data.response)
       }
     } catch (err) {
       console.error('Auto-alert chat failed:', err)
